@@ -226,14 +226,16 @@ mergeSymbols ::
      Bool
   -> AsteriusStore
   -> HS.HashSet AsteriusEntitySymbol
+  -> [AsteriusEntitySymbol]
   -> (Maybe AsteriusModule, LinkReport)
-mergeSymbols debug AsteriusStore {..} syms = (maybe_final_m, final_rep)
+mergeSymbols debug AsteriusStore {..} root_syms export_funcs =
+  (maybe_final_m, final_rep)
   where
     maybe_final_m
       | HS.null (unfoundSymbols final_rep) &&
           HS.null (unavailableSymbols final_rep) = Just final_m
       | otherwise = Nothing
-    (_, final_rep, final_m) = go (syms, mempty, mempty)
+    (_, final_rep, final_m) = go (root_syms, mempty, mempty)
     go i@(i_staging_syms, _, _)
       | HS.null i_staging_syms = o
       | otherwise = go o
@@ -266,7 +268,7 @@ mergeSymbols debug AsteriusStore {..} syms = (maybe_final_m, final_rep)
                                 { functionMap =
                                     [ ( i_staging_sym
                                       , patchWritePtrArrayOp $
-                                        maskUnknownCCallTargets $
+                                        maskUnknownCCallTargets export_funcs $
                                         resolveGlobalRegs func)
                                     ]
                                 }
@@ -509,6 +511,7 @@ linkStart debug store root_syms export_funcs =
              {entityName = "__asterius_jsffi_export_" <> entityName k}
            | k <- export_funcs
            ])
+        export_funcs
     (maybe_result_m, ss_sym_map, func_sym_map) =
       case maybe_merged_m of
         Just merged_m -> (Just result_m, ss_sym_map', func_sym_map')
