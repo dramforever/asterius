@@ -14,6 +14,7 @@ module Asterius.JSFFI
   , generateFFIImportObjectFactory
   ) where
 
+import Asterius.Builtins
 import Asterius.Internals
 import Asterius.Types
 import Asterius.TypesConv
@@ -531,7 +532,8 @@ generateFFIWrapperModule mod_ffi_state@FFIMarshalState {..} =
         [ (fromString $ recoverWasmWrapperFunctionName mk k, wrapper_func)
         | (mk, k, wrapper_func) <- import_wrapper_funcs
         ] <>
-        export_funcs
+        export_funcs <>
+        export_wrapper_funcs
     , ffiMarshalState = mod_ffi_state
     }
   where
@@ -544,6 +546,12 @@ generateFFIWrapperModule mod_ffi_state@FFIMarshalState {..} =
       [ (k, generateFFIExportFunction ffi_decl)
       | mod_ffi_decls <- HM.elems ffiExportDecls
       , (k, ffi_decl) <- HM.toList mod_ffi_decls
+      ]
+    export_wrapper_funcs =
+      [ ( AsteriusEntitySymbol
+            {entityName = "__asterius_jsffi_export_" <> entityName k}
+        , generateWrapperFunction k f)
+      | (k, f) <- export_funcs
       ]
 
 generateFFIFunctionImports :: FFIMarshalState -> [AsteriusFunctionImport]
