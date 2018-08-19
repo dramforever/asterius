@@ -423,11 +423,12 @@ resolveFunctionImport AsteriusFunctionImport {..} =
 resolveAsteriusModule ::
      Bool
   -> FFIMarshalState
+  -> [AsteriusEntitySymbol]
   -> AsteriusModule
   -> ( Module
      , HM.HashMap AsteriusEntitySymbol Int64
      , HM.HashMap AsteriusEntitySymbol Int64)
-resolveAsteriusModule debug bundled_ffi_state m_globals_resolved =
+resolveAsteriusModule debug bundled_ffi_state export_funcs m_globals_resolved =
   ( Module
       { functionTypeMap =
           HM.fromList
@@ -462,7 +463,13 @@ resolveAsteriusModule debug bundled_ffi_state m_globals_resolved =
           V.fromList [resolveFunctionImport imp | imp <- func_imports]
       , tableImports = []
       , globalImports = []
-      , functionExports = rtsAsteriusFunctionExports debug
+      , functionExports =
+          rtsAsteriusFunctionExports debug <>
+          V.fromList
+            [ FunctionExport
+              {internalName = "__asterius_jsffi_export_" <> k, externalName = k}
+            | k <- map entityName export_funcs
+            ]
       , tableExports = []
       , globalExports = []
       , globalMap = []
@@ -486,12 +493,22 @@ linkStart ::
      Bool
   -> AsteriusStore
   -> HS.HashSet AsteriusEntitySymbol
+  -> [AsteriusEntitySymbol]
   -> (Maybe Module, LinkReport)
-linkStart debug store syms =
+linkStart debug store root_syms export_funcs =
   ( maybe_result_m
   , report {staticsSymbolMap = ss_sym_map, functionSymbolMap = func_sym_map})
   where
-    (maybe_merged_m, report) = mergeSymbols debug store syms
+    (maybe_merged_m, report) =
+      mergeSymbols
+        debug
+        store
+        (root_syms <>
+         HS.fromList
+           [ AsteriusEntitySymbol
+             {entityName = "__asterius_jsffi_export_" <> entityName k}
+           | k <- export_funcs
+           ])
     (maybe_result_m, ss_sym_map, func_sym_map) =
       case maybe_merged_m of
         Just merged_m -> (Just result_m, ss_sym_map', func_sym_map')
@@ -499,6 +516,7 @@ linkStart debug store syms =
                   resolveAsteriusModule
                     debug
                     (bundledFFIMarshalState report)
+                    export_funcs
                     merged_m
         _ -> (Nothing, mempty, mempty)
 
